@@ -1,0 +1,113 @@
+services:
+
+  mysql:
+    image: mysql:8.0                                       # 使用 MySQL 8.0 最新版本
+    container_name: mysql
+    restart: unless-stopped                                # Docker启动时自动启动，重启也跟随重启
+    ports:
+      - "3306:3306"                                        # 主机 3306 映射容器 3306
+    volumes:
+      - /home/docker/conf/mysql:/etc/mysql/conf.d:z        # 配置文件目录（挂载自定义配置）
+      - /home/docker/data/mysql:/var/lib/mysql:z           # 数据存储目录
+      - /home/docker/logs/mysql:/var/log/mysql:z           # 日志存储目录（需配置启用）
+    environment:
+      - MYSQL_ROOT_PASSWORD=****************               # 请务必修改为强密码！
+      - MYSQL_DATABASE=test                                # 可选：创建初始数据库
+      - MYSQL_USER=****************                        # 可选：创建普通用户
+      - MYSQL_PASSWORD=****************                    # 可选：普通用户密码
+      - TZ=Asia/Shanghai                                   # 设置时区
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --log-error=/var/log/mysql/error.log               # 错误日志路径
+      - --general-log=1                                    # 开启通用查询日志
+      - --general-log-file=/var/log/mysql/general.log
+      - --slow-query-log=1                                 # 开启慢查询日志
+      - --slow-query-log-file=/var/log/mysql/slow.log
+      - --long-query-time=2                                # 慢查询阈值（秒）
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      
+  elasticsearch:
+    image: elasticsearch:8.19.19
+    container_name: elasticsearch
+    restart: unless-stopped                                     # Docker启动时自动启动容器，重启也跟随重启
+    ports:
+      - "9200:9200"                                             # 主机 9200 映射容器 9200
+    volumes:
+      - /home/docker/conf/es:/usr/share/elasticsearch/config    # 配置文件映射
+      - /home/docker/data/es:/usr/share/elasticsearch/data      # 数据存储映射
+      - /home/docker/logs/es:/usr/share/elasticsearch/logs      # 日志路径映射
+    environment:
+      - discovery.type=single-node                              # 单节点模式
+      - xpack.security.enabled=false                            # 关闭安全认证（便于快速测试）
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m                          # 堆内存设置（可根据主机资源调整）
+    ulimits:
+      memlock:
+        soft: -1                                                # 禁用内存锁定限制
+        hard: -1
+    mem_limit: 2g                                               # 容器整体内存上限（可选）
+    
+  kibana:
+    image: kibana:8.19.19
+    container_name: kibana
+    restart: unless-stopped                                # Docker启动时自动启动容器，重启也跟随重启
+    ports:
+      - "5601:5601"                                        # 主机 5601 映射容器 5601
+    volumes:
+      - /home/docker/conf/kibana:/usr/share/kibana/config  # 配置文件映射
+      - /home/docker/data/kibana:/usr/share/kibana/data    # 数据存储映射
+      - /home/docker/logs/kibana:/usr/share/kibana/logs    # 日志路径映射
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200      # 指向您的ES容器（请确保网络互通）
+      - XPACK_GRAPH_ENABLED=true                           # 可选，启用图形功能
+      - XPACK_ML_ENABLED=false                             # 根据需求关闭机器学习（节省资源）
+    networks:
+      - default
+    # 可选：如果ES不在同一网络，可改用宿主IP，例如：
+    # - ELASTICSEARCH_HOSTS=http://192.168.x.x:9200
+
+  qdrant:
+    image: qdrant/qdrant:latest                            # 拉取最新版本
+    container_name: qdrant                                 # 容器名称为 qrant
+    restart: unless-stopped                                # Docker 启动时自动启动，重启也跟随重启
+    ports:
+      - "6333:6333"                                        # HTTP API 端口映射
+      - "6334:6334"                                        # gRPC API 端口映射
+    volumes:
+      - /home/docker/conf/qdrant/config.yaml:/qdrant/config/production.yaml:z  # 配置文件映射
+      - /home/docker/data/qdrant:/qdrant/storage:z         # 数据存储映射
+      - /home/docker/logs/qdrant:/qdrant/logs:z            # 日志存储映射
+    environment:
+      - QDRANT__LOG_LEVEL=INFO                             # 设置日志级别
+      - QDRANT__LOG_FILE=/qdrant/logs/qdrant.log           # 配置日志文件路径
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    container_name: bge-large-zh
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      MODEL_ID: /models/bge-large-zh-v1.5
+      MAX_CONCURRENT_REQUESTS: "16"
+      MAX_BATCH_TOKENS: "16384"
+    volumes:
+      - /home/docker/data/bge-large-zh:/models/bge-large-zh-v1.5
+
+# 定义网络，方便与elasticsearch容器连接（如果使用docker-compose统一管理，可复用）
+networks:
+  default:
+    # 若想连接外部已存在的网络，可以指定外部网络，例如：
+    # external: true
+    # name: your_shared_network
+    # 否则默认会创建新网络，但与 elasticsearch 容器不在同一网络时无法通过容器名访问
+

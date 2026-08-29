@@ -1,0 +1,118 @@
+# ======================================== 服务配置 ========================================
+service_config:
+  name: shopkeeper-bill                                  # 服务名称
+  description: 掌柜问数                                   # 服务描述
+  version: 1.0.0                                         # 服务版本
+  host: 0.0.0.0                                          # 服务地址
+  port: 8000                                               # 服务端口
+
+# ======================================== 日志配置 ========================================
+log_config:
+  level_dict: # 日志级别
+    DEBUG: &debug_level 10                                 # 调试级别
+    INFO: &info_level 20                                   # 信息级别
+    WARN: &warn_level 30                                   # 警告级别
+    ERROR: &error_level 40                                 # 错误级别
+    FATAL: &fatal_level 50                                 # 致命级别
+  pattern: "[<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green>]-|-<<level>{level}</level>>-|-<magenta>task: {extra[request_id]}</magenta>-|-<cyan>{name}</cyan>: <cyan>{function}</cyan>: <cyan>{line}</cyan>-|-<level>{message}</level>"
+  file:
+    enable: true                                           # 是否在文件中输出
+    level: *info_level                                     # 日志级别
+    path: logs                                             # 日志路径
+    log_name: shopkeeper.log                               # 日志名称
+    rotation: "10 MB"                                      # 日志大小
+    retention: "7 days"                                    # 日志保留时间
+  console:
+    enable: true                                           # 是否在控制台输出
+    level: *info_level                                     # 日志级别
+
+# ====================================== Mysql 配置类 ======================================
+mysql_config:
+  protocol: &meta_protocol mysql+asyncmy                   # 连接协议
+  host: &meta_host "****************"                      # 数据库地址
+  port: &meta_port 3306                                    # 数据库端口
+  user: &meta_user "****************"                      # 数据库用户名
+  password: &meta_password "****************"              # 密码
+  database: test                                           # 数据库名称
+  charset: &meta_charset utf8mb4                           # 字符集
+  pool_size: &meta_pool_size 10                            # 连接池大小
+  auto_flush: &meta_auto_flush true                        # 是否自动刷新
+  auto_commit: &meta_auto_commit true                      # 是否自动提交
+  auto_begin: &meta_auto_begin true                        # 是否自动开始
+  expire_on_commit: &meta_expire_on_commit false           # 是否在提交时过期
+  print_sql: &meta_print_sql false                         # 是否打印 SQL
+  
+# ==================================== Warehouse 配置类 ====================================
+warehouse_config:
+  protocol: *meta_protocol                                 # 连接协议
+  host: *meta_host                                         # 数据库地址
+  port: *meta_port                                         # 数据库端口
+  user: *meta_user                                         # 数据库用户名
+  password: *meta_password                                 # 密码
+  database: test                                           # 数据库名称
+  charset: *meta_charset                                   # 字符集
+  pool_size: *meta_pool_size                               # 连接池大小
+  auto_flush: *meta_auto_flush                             # 是否自动刷新
+  auto_commit: *meta_auto_commit                           # 是否自动提交
+  auto_begin: *meta_auto_begin                             # 是否自动开始
+  expire_on_commit: *meta_expire_on_commit                 # 是否在提交时过期
+  print_sql: *meta_print_sql                               # 是否打印 SQL
+
+# ====================================== QDrant 配置 =======================================
+qdrant_column_config:
+  protocol: &qdrant_protocol https                         # 连接协议
+  host: &qdrant_host "****************"                    # 连接地址
+  port: &qdrant_port 6333                                  # 连接端口
+  user: &qdrant_user "****************"                    # 用户名
+  password: &qdrant_password  "****************"           # 密码
+  collection_name: shopkeeper-column                       # 集合名称
+  dimension: &qdrant_dimension 1536                        # 向量维度
+  similarity: &qdrant_similarity Cosine                    # 相似度：余弦
+  time_out: &qdrant_time_out 10                            # 超时时间
+  pool_size: &qdrant_pool_size 10                          # 最大连接数
+  score: &qdrant_score 0.5                                 # 搜索评分
+
+qdrant_metric_config:
+  protocol: *qdrant_protocol                               # 连接协议
+  host: *qdrant_host                                       # 连接地址
+  port: *qdrant_port                                       # 连接端口
+  user: *qdrant_user                                       # 用户名
+  password: *qdrant_password                               # 密码
+  collection_name: shopkeeper-metric                       # 集合名称
+  dimension: *qdrant_dimension                             # 向量维度
+  similarity: *qdrant_similarity                           # 相似度：余弦
+  time_out: *qdrant_time_out                               # 超时时间
+  pool_size: *qdrant_pool_size                             # 最大连接数
+  score: *qdrant_score                                     # 搜索评分
+
+# =================================== ElasticSearch 配置 ===================================
+elasticsearch_config:
+  protocol: https                                          # 连接协议
+  host: "****************"                                 # 连接地址
+  port: 9200                                               # 连接端口
+  user: "****************"                                 # 用户名
+  api_key: "****************"                              # 密码
+  mapping: '{"dynamic": false, "properties": {"id": {"type": "keyword"},"value": {"type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_max_word"},"type": {"type": "keyword"},"column_id": {"type": "keyword"},"column_name": {"type": "keyword"},"table_id": {"type": "keyword"},"table_name": {"type": "keyword"}}}'
+  index: shopkeeper                                        # 索引名称
+  time_out: 10                                             # 超时时间
+  max_connections: 10                                      # 最大连接数
+
+# ====================================== 嵌入模型配置 ======================================
+embedding_config:
+  url: https://api.openai-proxy.org/v1                     # 模型地址
+  api_key: "****************"                              # api 密钥
+  name: text-embedding-3-large                             # 模型名称
+  path: BAAI/bge-large-zh-v1.5                             # 模型路径
+  dimension: 1536                                          # 嵌入维度
+  time_out: 60                                             # 超时时间
+  max_retry: 3                                             # 最大重试次数
+
+# ========================================= 云模型 =========================================
+model_config:
+  url: https://api.deepseek.com                            # 模型地址
+  api_key: "****************"                              # API密钥
+  name: deepseek-v4-pro                                    # 模型名称
+  timeout: 60                                              # 超时时间
+  max_retrie: 3                                            # 最大重试次数
+  temperature: 0                                           # 模型服务温度
+  max_token: 10240                                         # 模型服务最大 tokens

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-dotenv
+pymysql
+DBUtils
+openai
+httpx
+openai-agents
+mcp
+pystun3
+mcp-server-baidu-maps

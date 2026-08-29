@@ -1,0 +1,6 @@
+
+# 创建 neo4j 数据库 
+
+```shell
+neo4j-admin database load --from-path=<dump文件所在目录> --overwrite-destination=true neo4j
+```

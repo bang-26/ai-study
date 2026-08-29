@@ -1,0 +1,107 @@
+# ======================================== 服务配置 ========================================
+service_config:
+  name: shopkeeper-knowledge                     # 服务名称
+  description: 掌柜智库                           # 服务描述
+  version: 1.0.0                                 # 服务版本
+  host: 0.0.0.0                                  # 服务地址
+  port: 8000                                     # 服务端口
+
+# ======================================== 日志配置 ========================================
+log_config:
+  level_dict: # 日志级别
+    DEBUG: &debug_level 10                       # 调试级别
+    INFO: &info_level 20                         # 信息级别
+    WARN: &warn_level 30                         # 警告级别
+    ERROR: &error_level 40                       # 错误级别
+    FATAL: &fatal_level 50                       # 致命级别
+  pattern: "[<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green>]-|-<<level>{level}</level>>-|-<magenta>task: {extra[request_id]}</magenta>-|-<cyan>{name}</cyan>: <cyan>{function}</cyan>: <cyan>{line}</cyan>-|-<level>{message}</level>"
+  file:
+    enable: true                                 # 是否在文件中输出
+    level: *info_level                           # 日志级别
+    path: logs                                   # 日志路径
+    log_name: shopkeeper-knowledge.log           # 日志名称
+    rotation: "10 MB"                            # 日志大小
+    retention: "7 days"                          # 日志保留时间
+  console:
+    enable: true                                 # 是否在控制台输出
+    level: *debug_level                          # 日志级别
+
+# ====================================== 文档转换配置 ======================================
+mineru_config:
+  upload_url: https://mineru.net/api/v4/file-urls/batch              # 文件上传地址
+  download_url: https://mineru.net/api/v4/extract-results/batch      # 文件上传结果
+  token: "****************"                        # 连接 token
+  model_version: vlm                             # 使用的模型
+  poll_interval: 3                               # 两次请求的间隔
+  timeout: 20                                    # 连接超时时间
+
+# ====================================== MinIO 配置类 ======================================
+minio_config:
+  endpoint: "****************:9010"               # 连接地址
+  is_secure: false                               # 是否使用 HTTPS
+  access_key: "****************"                  # 用户名
+  secret_key: "****************"                  # 安全秘钥
+  bucket_name: shopkeeper-knowledge              # 使用的桶名
+  image_folder: images                           # 图片文件夹
+  max_connection: 60                             # 最大连接数
+
+# ========================================= 云模型 =========================================
+model_config:
+  url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key: "****************"
+  name: qwen3.8-max                              # 模型名称
+  timeout: 60                                    # 超时时间
+  max_retry: 3                                   # 最大重试次数
+  temperature: 0                                 # 模型服务温度
+  max_token: 10240                               # 模型服务最大 tokens
+  enable_thinking: false                         # 是否启用思考过程
+
+# ===================================== Milvus 配置类 ======================================
+milvus_config:
+    url: http://****************:19530           # 连接地址
+    collection_name: shopkeeper_knowledge        # 集合名称
+    auto_id: true                                # 是否自动生成 ID
+    enable_dynamic_field: true                   # 是否启用动态字段
+    
+    entity_name: graph_entity                    # 实体名称集合
+    item_name: item_name                         # 存储文档对应实体类的集合名称
+    dimension: 1024                              # 向量维度
+    metric_type: COSINE                          # 度量类型
+    index_type: str                              # 索引类型
+    index_param: {}                              # 索引参数
+    search_param: {}                             # 搜索参数
+    timeout: 30                                  # 连接超时
+  
+# ========================================= Embed =========================================
+embed_config:
+  model_path: BAAI/bge-m3                        # 模型路径
+  device: cuda:0                                 # 使用的设备
+  enable_fp16: true                              # 是否启用 FP16
+  dimension: 1024                                # 向量维度
+  
+# ======================================== 重排序模型 ========================================
+rerank_config:
+  model_path: BAAI/bge-reranker-large            # 模型路径
+  device: cuda:0                                 # 使用的设备
+  enable_fp16: true                              # 是否启用 FP16
+  dimension: 1024                                # 向量维度
+  
+# ====================================== Mysql 配置类 ======================================
+mongo_config:
+  protocol: mongodb                              # 连接协议
+  host: "****************"                        # 数据库地址
+  port: 27017                                    # 数据库端口
+  user: "****************"                        # 数据库用户名
+  password: "****************"                    # 密码
+  database: shopkeeper_knowledge                 # 数据库名称
+  collection: chat_message                       # 集合名称
+
+# ======================================= 百炼 MCP =======================================
+mcp_config:
+  name: mcp_search                               # 服务名称
+  url: https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp      # 连接地址
+  api_key: "****************"
+  count: 5                                       # 查询限制
+  tool: bailian_web_search                       # 工具名称
+  max_retry: 3                                   # 最大重试次数
+  timeout: 60                                    # 超时时间

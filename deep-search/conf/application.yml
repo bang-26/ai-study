@@ -1,0 +1,73 @@
+# ======================================== 服务配置 ========================================
+service_config:
+  name: deep-search                              # 服务名称
+  description: 深度搜索                           # 服务描述
+  version: 1.0.0                                 # 服务版本
+  host: 0.0.0.0                                  # 服务地址
+  port: 8000                                     # 服务端口
+
+# ======================================== 日志配置 ========================================
+log_config:
+  level_dict: # 日志级别
+    DEBUG: &debug_level 10                       # 调试级别
+    INFO: &info_level 20                         # 信息级别
+    WARN: &warn_level 30                         # 警告级别
+    ERROR: &error_level 40                       # 错误级别
+    FATAL: &fatal_level 50                       # 致命级别
+  pattern: "[<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green>]-|-<<level>{level}</level>>-|-<magenta>task: {extra[request_id]}</magenta>-|-<cyan>{name}</cyan>: <cyan>{function}</cyan>: <cyan>{line}</cyan>-|-<level>{message}</level>"
+  file:
+    enable: true                                 # 是否在文件中输出
+    level: *info_level                           # 日志级别
+    path: logs                                   # 日志路径
+    log_name: deep-search.log                    # 日志名称
+    rotation: "10 MB"                            # 日志大小
+    retention: "7 days"                          # 日志保留时间
+  console:
+    enable: true                                 # 是否在控制台输出
+    level: *info_level                           # 日志级别
+
+# ====================================== Mysql 配置类 ======================================
+mysql_config:
+  protocol: mysql+asyncmy                        # 连接协议
+  host: "****************"                        # 数据库地址
+  port: 3316                                     # 数据库端口
+  user: "****************"                        # 数据库用户名
+  password: "****************"                    # 密码
+  database: pharma                               # 数据库名称
+  charset: utf8mb4                               # 字符集
+  timeout: 30                                    # 连接池大小
+  max_connection: 60                             # 最大连接数
+  auto_flush: true                               # 是否自动刷新
+  auto_commit: true                              # 是否自动提交
+  print_sql: true                                # 是否打印 SQL
+
+# ========================================= 云模型 =========================================
+model_config:
+  url: https://api.deepseek.com                  # 模型地址
+  api_key: "****************"                    # API密钥
+  name: deepseek-v4-flash                        # 模型名称
+  timeout: 60                                    # 超时时间
+  max_retrie: 3                                  # 最大重试次数
+  temperature: 0                                 # 模型服务温度
+  max_token: 10240                               # 模型服务最大 tokens
+
+# ========================================= 云模型 =========================================
+tavily_config:
+  base_url: https://api.tavily.com               # Tavily API 地址
+  api_key: "****************"
+  search_depth: advanced                         # 搜索深度
+  include_answer: true                           # 是否包含答案，basic, advanced, fast, ultra-fast
+  topic: general                                 # 搜索主题
+  max_results: 5                                 # 最大结果数
+  include_raw_content: false                     # 是否包含原始内容
+  
+# ========================================= RagFlow =========================================
+ragflow_config:
+  base_url: http://****************              # RagFlow API 地址
+  api_key: "****************"
+  knowledge_base: deep_search                    # 知识库名称
+  knowledge_description: "This is a knowledge base for deep search."
+  embedding: text-embedding-v3@Tongyi-Qianwen    # 嵌入模型
+  assistant_name: 空调安装助手          # 助手名称
+  session_name: deep_search_session              # 会话名称
+  is_stream: true                                # 是否流式返回

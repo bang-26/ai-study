@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest                            # 拉取最新版本
+    container_name: qdrant                                 # 容器名称为 qrant
+    restart: unless-stopped                                # Docker 启动时自动启动，重启也跟随重启
+    ports:
+      - "6333:6333"                                        # HTTP API 端口映射
+      - "6334:6334"                                        # gRPC API 端口映射
+    volumes:
+      - /home/docker/conf/qdrant/config.yaml:/qdrant/config/production.yaml:z  # 配置文件映射
+      - /home/docker/data/qdrant:/qdrant/storage:z         # 数据存储映射
+      - /home/docker/logs/qdrant:/qdrant/logs:z            # 日志存储映射
+    environment:
+      - QDRANT__LOG_LEVEL=INFO                             # 设置日志级别
+      - QDRANT__LOG_FILE=/qdrant/logs/qdrant.log           # 配置日志文件路径
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
