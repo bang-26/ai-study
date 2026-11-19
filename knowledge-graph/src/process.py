@@ -56,25 +56,25 @@ class DataProcessor:
         dataset_dict = dataset.map(function=self.__encode_data, remove_columns=FieldConfig.SAVE_REMOVE_COLUMNS)
         
         # 7. 保存数据集
-        self.save_data(dataset=dataset_dict, data_path=self.processed_data_path)
+        self.__save_data(dataset=dataset_dict, data_path=self.processed_data_path)
         
     # 读取数据集
-    def load_data(self, data_path: str = None, data_type: str = None) -> DatasetDict:
-        if data_path is None:
-            data_path = self.processed_data_path
+    def load_data(self, data_path: str = "", data_type: str = "") -> DatasetDict:
+        if not data_path:
+            data_path = self.raw_data_path
         
-        if data_type is None:
+        if not data_type:
             data_type = self.raw_data_type
             
         dataset = load_dataset(path=data_type, data_files=data_path)
         return dataset
     
     # 保存数据集
-    def save_data(self, dataset: DatasetDict = None, data_path: str = None) -> None:
-        if dataset is None:
+    def __save_data(self, dataset: DatasetDict = None, data_path: str = "") -> None:
+        if not dataset:
             dataset = self.load_data()
         
-        if data_path is None:
+        if not data_path:
             data_path = self.processed_data_path
             
         dataset.save_to_disk(dataset_dict_path=data_path)
@@ -89,8 +89,8 @@ class DataProcessor:
         token_list = list(example[FieldConfig.CONTENT_FIELD])
         
         # 3. 文本编码（使用 TrainConfig.MAX_LENGTH 确保截断一致性）
-        encoded = self.tokenizer(text=token_list, is_split_into_words=FieldConfig.IS_SPLIT_WORDS,
-                                 truncation=FieldConfig.IS_TRUNCATION, max_length=FieldConfig.MAX_LENGTH)
+        encoded = self.tokenizer.__call__(text=token_list, is_split_into_words=FieldConfig.IS_SPLIT_WORDS,
+                                          truncation=FieldConfig.IS_TRUNCATION, max_length=FieldConfig.MAX_LENGTH)
         
         # 4. 进行实体标注
         entries = example[FieldConfig.LABEL_FIELD]
@@ -127,8 +127,3 @@ class DataProcessor:
         encoded[FieldConfig.TARGET_FIELD] = token_labels
         
         return encoded
-
-
-if __name__ == '__main__':
-    process = DataProcessor()
-    process.process_data()

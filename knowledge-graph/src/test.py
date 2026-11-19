@@ -15,37 +15,53 @@
 ====================================================================================================
 """
 
-import os
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+from os import environ
+environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 from unittest import TestCase
-from commerce import GraphModel
+from dotenv import load_dotenv
+from requests import get, post
+from config import MysqlConfig, Neo4jConfig
 from process import DataProcessor
-from connnect import Neo4jConnection, GraphConnection
-from config import Neo4jConfig
+from commerce import GraphModel
+from connnect import MysqlConnection, Neo4jConnection, GraphConnection
 from web import IndexUtil, ChatService
 
 
 class EnvTest(TestCase):
+    load_dotenv()
+    
     def test_env(self):
-        from dotenv import load_dotenv
-        load_dotenv()
-        print(os.environ.get("HF_ENDPOINT"))
+        hf = environ.get("HF_ENDPOINT")
+        print(f"hf = {hf}")
 
 
 class ProcessTest(TestCase):
     process = DataProcessor()
     
+    def test_load(self):
+        dataset = self.process.load_data()
+        print(f"dataset = {dataset}")
+        
     def test_process(self):
         self.process.process_data()
-
+        
 
 class ModelTest(TestCase):
     model = GraphModel()
     
     def test_train(self):
-        self.model.train()
+        from config import TrainConfig
+        TrainConfig.EPOCHS = 10
+        
+        results = self.model.train()
+        print(f"results = {results}")
     
+    def test_eval(self):
+        result = self.model.eval()
+        for metric, value in result.items():
+            print(f"{metric} ==> {value}")
+        
     def test_predict(self):
         text_list = ["麦德龙德国进口双心多维叶黄素护眼营养软胶囊30粒x3盒眼干涩",
                      "韩国耳环现货nuance品牌正品耳坠耳钉耳饰品不对称木片耳环",
@@ -54,70 +70,84 @@ class ModelTest(TestCase):
                       "高跟鞋子女一字扣女猫跟鞋2017春季新款露脚背尖头细跟百搭单鞋",
                       "hipanda你好熊猫设计潮牌男款跨版条纹尼龙风衣防晒"]
                      ]
-        
+            
         for text in text_list:
             result = self.model.predict(text=text)
             print(f"result = {result}")
+
+
+class MysqlTest(TestCase):
+    mysql = MysqlConnection(host=MysqlConfig.HOST, port=MysqlConfig.PORT, user=MysqlConfig.USER,
+                            password=MysqlConfig.PASSWORD, database=MysqlConfig.DATABASE)
+    
+    def test_query(self):
+        query = "show tables"
+        result = self.mysql.query_data(query=query, print_query=True)
+        for row in result:
+            print(f"row = {row}")
+        self.mysql.close()
         
-        while 1:
-            # text = input("请输入文本：")
-            text = "exit"
-            
-            if text == "exit":
-                break
-            else:
-                result = self.model.predict(text=text)
-                print(f"result = {result}")
-
-
-class ConnectTest(TestCase):
-    connect = Neo4jConnection(host=Neo4jConfig.HOST, port=Neo4jConfig.PORT, user=Neo4jConfig.USER,
-                              password=Neo4jConfig.PASSWORD, database=Neo4jConfig.DATABASE)
-    
-    def test_query_all(self):
-        query = "MATCH (n) RETURN n"
-        result = self.connect.query_data(query=query)
-        print(f"result = {result}")
-        self.connect.close()
-    
-    def test_clear_all(self):
-        query = "MATCH (n) DETACH DELETE n"
-        result = self.connect.query_data(query=query)
-        print(f"result = {result}")
-        self.connect.close()
-
-
+        
 class GraphTest(TestCase):
     graph = GraphConnection(host=Neo4jConfig.HOST, port=Neo4jConfig.PORT, user=Neo4jConfig.USER,
                             password=Neo4jConfig.PASSWORD, database=Neo4jConfig.DATABASE)
     
     def test_query(self):
-        query = "MATCH (n:Trademark) RETURN n"
+        query = "MATCH (n) RETURN DISTINCT labels(n), count(*) LIMIT 25;"
         result = self.graph.query_data(query=query)
         print(f"result = {result}")
         self.graph.close()
+
+
+class Neo4jTest(TestCase):
+    connect = Neo4jConnection(host=Neo4jConfig.HOST, port=Neo4jConfig.PORT, user=Neo4jConfig.USER,
+                              password=Neo4jConfig.PASSWORD, database=Neo4jConfig.DATABASE)
+    
+    def test_query(self):
+        query = "MATCH (n) RETURN DISTINCT labels(n), count(*) LIMIT 25;"
+        result = self.connect.query_data(query=query)
+        print(f"result = {result}")
+        self.connect.close()
         
 
 class IndexTest(TestCase):
     index = IndexUtil()
-
-    def test_create_index(self):
-        self.index.create_full_text_index("trademark_fulltext_index", "Trademark", "name")
-        self.index.create_vector_index("trademark_vector_index", "Trademark", "name", "embedding")
     
+    def test_create_index(self):
+        self.index.create_full_text_index(name="trademark_fulltext_index", label="Trademark", properties="name")
+        self.index.create_vector_index(name="trademark_vector_index", label="Trademark",
+                                       source_property="name", embedding_property="embedding")
+                
     def test_index(self):
         self.index.create_index()
-    
+        
     # 查询所有索引
     def test_query_index(self):
         query = "SHOW INDEXES"
         results = self.index.graph.query_data(query=query)
         for result in results:
             print(f"result = {result}")
-
-
+            
+            
 class ChatTest(TestCase):
     chat = ChatService()
-    
-    def test_vector(self):
-        print(f"result = {self.chat.vector_dict}")
+
+    def test_chat(self):
+        result = self.chat.chat("你叫什么名字")
+        print(f"result = {result}")
+        
+        
+class WebTest(TestCase):
+    base_url = "http://10.0.0.136:8000"
+
+    def test_index(self):
+        url = f"{self.base_url}/"
+        response = get(url)
+        print(f"response = {response.text}")
+
+    def test_chat(self):
+        url = f"{self.base_url}/api/chat"
+        json = {"message": "介绍下小米手机"}
+        response = post(url=url, json=json).json()
+        
+        print(f"message = {response.get('message')}")

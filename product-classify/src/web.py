@@ -6,21 +6,17 @@
     ProjectName    ：  product-classify  
     FileName       ：  web 
     CreateTime     ：  2026-06-24 21:33:01 
-    Author         ：  issac  
+    Author         ：  Administrator
     PythonCompiler ：  3.13.9 
     IDE            ：  PyCharm-2025.3.4 
     Description    ：  文件描述 
 ====================================================================================================
 """
 
-import os
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-
 import uvicorn
-from os.path import abspath, dirname
 from time import strftime, time_ns
 from fastapi import FastAPI
-from product_classify import ProductModel
+from product_classify import Config, ProductPredictor
 from pydantic import BaseModel
 
 
@@ -34,25 +30,9 @@ class Category(BaseModel):
     category: str
     
 
-# 配置类
-class Config:
-    # ============================== 参数路径 ==============================
-    PYTHON_PATH = abspath(path=__file__)                             # 脚本路径
-    PYTHON_DIR = dirname(p=PYTHON_PATH)                              # Python 文件所在目录
-    PROJECT_DIR = abspath(path=f"{PYTHON_DIR}/../")                  # 项目路径
-    
-    VOCAB_PATH = "google-bert/bert-base-chinese"                     # 词表路径
-    LABELS_PATH = abspath(path=f"{PROJECT_DIR}/data/labels.txt")     # 标签保存路径
-    MODEL_PATH = f"{PROJECT_DIR}/models/couplet"                     # 模型保存路径
-
-
 # 创建服务
-app = FastAPI(module_name="web", description="产品分类接", version="1.0", title="产品分类接口")
-
-# 创建模型
-model = ProductModel(model_path=Config.VOCAB_PATH,         # 词表路径
-                     saved_model_path=Config.MODEL_PATH,   # 模型保存路径
-                     label_path=Config.LABELS_PATH)        # 标签保存路径
+app = FastAPI(description="产品分类接", version="1.0", title="产品分类接口")
+model = ProductPredictor(config=Config())                  # 创建模型
 
 
 # 获取预测结果
@@ -68,7 +48,13 @@ def get_predict(title: Title) -> Category:
 
 
 # 预测接口
-@app.post("/predict")
+@app.get(path="/", response_model=dict[str, str], summary="测试接口")
+def hello() -> dict[str, str]:
+    return {"hello": "world"}
+    
+    
+# 预测接口
+@app.post(path="/predict", response_model=Category, summary="预测接口")
 def predict(title: Title) -> Category:
     category = get_predict(title=title)                    # 获取预测结果
     return category

@@ -23,7 +23,7 @@ from torch import float16, int32
 class PathConfig:
     # ============================== 基本路径 ==============================
     PYTHON_PATH = abspath(path=__file__)                             # 脚本路径
-    PYTHON_DIR = dirname(p=PYTHON_PATH)                              # Python 文件所在目录
+    PYTHON_DIR = dirname(p=f"{PYTHON_PATH}")                         # Python 文件所在目录
     PROJECT_DIR = abspath(path=f"{PYTHON_DIR}/../")                  # 项目路径
     
     # ============================== 数据路径 ==============================
@@ -40,7 +40,7 @@ class PathConfig:
     SAVED_MODEL_PATH = abspath(path=f"{PROJECT_DIR}/model")          # 模型保存路径
     LOG_DIR = abspath(path=f"{PROJECT_DIR}/logs")                    # 日志保存位置
     CHECK_POINT_DIR = abspath(path=f"{PROJECT_DIR}/check-point")     # 检查点保存位置
-
+    
     
 # 数据字段配置类
 class FieldConfig:
@@ -95,7 +95,7 @@ class TrainConfig:
     IS_RETURN_OFFSET_MAPPING = True
     
     # ============================== 训练超参数 ==============================
-    BATCH_SIZE = 8                                                   # 批处理大小
+    BATCH_SIZE = 512                                                 # 批处理大小
     IS_SHUFFLE = True                                                # 是否打乱数据
     
     EPOCHS = 30                                                      # 训练轮数

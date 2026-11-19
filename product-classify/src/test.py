@@ -6,7 +6,7 @@
     ProjectName    ：  product-classify  
     FileName       ：  test 
     CreateTime     ：  2026-06-24 23:34:07 
-    Author         ：  issac  
+    Author         ：  Administrator
     PythonCompiler ：  3.13.9 
     IDE            ：  PyCharm-2025.3.4 
     Description    ：  文件描述 
@@ -15,75 +15,52 @@
 
 from unittest import TestCase
 from multiprocess.pool import Pool
-from requests import post
-from product_classify import ProductDataProcess, ProductModel, Config
+from requests import get, post
+from product_classify import Config, ProductDataProcess, ProductModel, ProductTrainer
 from web import Title
 
 
-class ProductTest(TestCase):
-    Config.BATCH_SIZE = 8
-    Config.TRAIN_SELECT_NUMBER = 1000
-    Config.VALID_SELECT_NUMBER = 100
-    Config.TEST_SELECT_NUMBER = 1000
-    Config.EPOCHS = 5
-    Config.SAVE_STEP = 10
-    Config.STOP_PATIENCE = 2
+config = Config()
+
+
+class DataProcessTest(TestCase):
+    process = ProductDataProcess(config=config)
     
     def test_process(self):
-        process = ProductDataProcess(data_path=Config.DATASET_PATH, label_path=Config.LABELS_PATH)
-        process.process_data()
-    
-    def test_loader(self):
-        process = ProductDataProcess(data_path=Config.DATASET_PATH, label_path=Config.LABELS_PATH)
-        train_path = f"{Config.DATASET_PATH}/{Config.TRAIN_FLAG}"
-        loader = process.get_dataloader(dataset_path=train_path)
+        self.process.process_data(ratio=0.01)
         
+    def test_loader(self):
+        train_path = f"{config.DATA_DIR}/{config.TEST_FLAG}"
+        loader = self.process.get_dataloader(dataset_path=train_path)
+        
+        print(f"size = {len(loader)}")
         for batch in loader:
             for k, v in batch.items():
                 print(f"{k} = {v}")
             break
+
+
+class TrainerTest(TestCase):
+    process = ProductDataProcess(config=config)
+    product = ProductModel(config=config)
+    trainer = ProductTrainer(config=config, product_model=product)
     
     def test_trainer(self):
-        model = ProductModel(data_path=Config.DATASET_PATH, model_path=Config.BERT_MODEL,
-                               saved_model_path=Config.SAVED_MODEL_PATH, label_path=Config.LABELS_PATH,
-                               check_point_path=Config.CHECK_POINT_DIR)
-        model.train()
-    
-    def test_evaluator(self):
-        model = ProductModel(data_path=Config.DATASET_PATH, model_path=Config.BERT_MODEL,
-                               saved_model_path=Config.SAVED_MODEL_PATH, label_path=Config.LABELS_PATH,
-                               check_point_path=Config.CHECK_POINT_DIR)
-        metrics = model.test()
-        print(f"metrics = {metrics}")
-    
-    def test_predict(self):
-        model = ProductModel(data_path=Config.DATASET_PATH, model_path=Config.BERT_MODEL,
-                               saved_model_path=Config.SAVED_MODEL_PATH, label_path=Config.LABELS_PATH,
-                               check_point_path=Config.CHECK_POINT_DIR)
-        content = "好奇心钻装纸尿裤L40片9-14kg"
-        label = model.predict(texts=content)
-        print(f"label = {label}")
-    
-        contents = ["240ML*15养元2430六个核桃", "911-267遥控车", "潘婷丝质顺滑洗发露750ml"]
-        labels = model.predict(texts=contents)
-        print(f"labels = {labels}")
-
-
-def call_predict(text: str):
-    uri = "/predict"
-    title = Title(text=text)
-    response = post(url=f"{WebTest.BASE_URL}{uri}", json=dict(title))
-    # 根据你的需求处理响应
-    if response.status_code == 200:
-        category = response.json().get("category")
-        print(f"{text} ==> {category}")
-    else:
-        print(f"{text} 请求失败，状态码 {response.status_code}")
+        config.LEARNING_RATE = 0.001
         
+        train_loader = self.process.get_dataloader(dataset_path=f"{config.DATA_DIR}/{config.TRAIN_FLAG}")
+        valid_loader = self.process.get_dataloader(dataset_path=f"{config.DATA_DIR}/{config.VALID_FLAG}")
         
+        self.trainer.train(train_loader=train_loader, valid_loader=valid_loader)
+        
+
 class WebTest(TestCase):
     BASE_URL = "http://127.0.0.1:8080"
     
+    def test_hello(self):
+        response = get(url=f"{self.BASE_URL}/")
+        print(response.json())
+        
     def test_predict(self):
         text_list = [
             "好奇心钻装纸尿裤L40片9-14kg",
@@ -101,4 +78,17 @@ class WebTest(TestCase):
         ]
         
         with Pool(processes=2) as pool:
-            pool.map(func=call_predict, iterable=text_list)
+            pool.map(func=self.__call_predict, iterable=text_list)
+    
+    @staticmethod
+    def __call_predict(text: str):
+        uri = "/predict"
+        title = Title(text=text)
+        response = post(url=f"{WebTest.BASE_URL}{uri}", json=dict(title))
+        
+        # 根据你的需求处理响应
+        if response.status_code == 200:
+            category = response.json().get("category")
+            print(f"{text} ==> {category}")
+        else:
+            print(f"请求失败，状态码 {response.status_code}")

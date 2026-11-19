@@ -18,6 +18,7 @@
 import os
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
+from functools import lru_cache
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_deepseek import ChatDeepSeek
@@ -52,7 +53,7 @@ class IndexUtil:
     def create_full_text_index(self, name: str, label: str, properties: str = "name"):
         cypher = f"CREATE FULLTEXT INDEX {name} IF NOT EXISTS FOR (n:{label}) ON EACH [n.{properties}]"
         result = self.graph.query_data(query=cypher)
-    
+        
     # 创建向量索引
     def create_vector_index(self, name: str, label: str, source_property: str, embedding_property: str) -> None:
         embedding_dim = self.__generate_embedding(label=label, source=source_property, embedding=embedding_property)
@@ -91,23 +92,23 @@ class IndexUtil:
         cypher = f"UNWIND $batch AS item MATCH (n:{label}) WHERE id(n) = item.id SET n.{embedding} = item.embedding"
         r = self.graph.query_data(query=cypher, params={"batch": batch_list})
         return len(embedding_list[0])
-    
+        
     # 内部方法：创建索引
     def create_index(self) -> None:
-        self.create_full_text_index("trademark_fulltext_index", "Trademark", "name")
-        # self.create_vector_index("trademark_vector_index", "Trademark", "name", "embedding")
+        self.create_full_text_index(name="trademark_fulltext_index", label="Trademark", properties="name")
+        self.create_vector_index(name="trademark_vector_index", label="Trademark", source_property="name", embedding_property="embedding")
         
-        self.create_full_text_index('spu_fulltext_index', 'SPU', 'name')
-        self.create_vector_index('spu_vector_index', 'SPU', 'name', 'embedding')
-        self.create_full_text_index('sku_fulltext_index', 'SKU', 'name')
-        self.create_vector_index('sku_vector_index', 'SKU', 'name', 'embedding')
+        self.create_full_text_index(name='spu_fulltext_index', label='SPU', properties='name')
+        self.create_vector_index(name='spu_vector_index', label='SPU', source_property='name', embedding_property='embedding')
+        self.create_full_text_index(name='sku_fulltext_index', label='SKU', properties='name')
+        self.create_vector_index(name='sku_vector_index', label='SKU', source_property='name', embedding_property='embedding')
         
-        self.create_full_text_index('category1_fulltext_index', 'Category1', 'name')
-        self.create_vector_index('category1_vector_index', 'Category1', 'name', 'embedding')
-        self.create_full_text_index('category2_fulltext_index', 'Category2', 'name')
-        self.create_vector_index('category2_vector_index', 'Category2', 'name', 'embedding')
-        self.create_full_text_index('category3_fulltext_index', 'Category3', 'name')
-        self.create_vector_index('category3_vector_index', 'Category3', 'name', 'embedding')
+        self.create_full_text_index(name='category1_fulltext_index', label='Category1', properties='name')
+        self.create_vector_index(name='category1_vector_index', label='Category1', source_property='name', embedding_property='embedding')
+        self.create_full_text_index(name='category2_fulltext_index', label='Category2', properties='name')
+        self.create_vector_index(name='category2_vector_index', label='Category2', source_property='name', embedding_property='embedding')
+        self.create_full_text_index(name='category3_fulltext_index', label='Category3', properties='name')
+        self.create_vector_index(name='category3_vector_index', label='Category3', source_property='name', embedding_property='embedding')
         
         
 class ChatService:
@@ -135,21 +136,26 @@ class ChatService:
         query_result = self.graph.query_data(query=cypher_query, params=params)
         answer = self.__generate_answer(question=question, query_result=query_result)
         return answer
-    
-    #  内部方法：生成向量索引
-    def __gen_vector(self, name: str) -> Neo4jVector:
-        vector = Neo4jVector.from_existing_index(
-                embedding=self.embedding_model,
-                index_name=f"{name.lower()}_vector_index",
-                search_type=SearchType.HYBRID,
-                keyword_index_name=f"{name.lower()}_fulltext_index",
-                url=f"neo4j://{Neo4jConfig.HOST}:{Neo4jConfig.PORT}/{Neo4jConfig.DATABASE}",
-                username=Neo4jConfig.USER,
-                password=Neo4jConfig.PASSWORD,
-        )
         
+    #  内部方法：生成向量索引
+    def __gen_vector(self, name: str) -> Neo4jVector | None:
+        try:
+            vector = Neo4jVector.from_existing_index(
+                    embedding=self.embedding_model,
+                    index_name=f"{name.lower()}_vector_index",
+                    search_type=SearchType.HYBRID,
+                    keyword_index_name=f"{name.lower()}_fulltext_index",
+                    url=f"neo4j://{Neo4jConfig.HOST}:{Neo4jConfig.PORT}/{Neo4jConfig.DATABASE}",
+                    username=Neo4jConfig.USER,
+                    password=Neo4jConfig.PASSWORD,
+            )
+        except ValueError as e:
+            print(f"=============== 索引 {name.lower()}_vector_index 不存在，跳过实体对齐 ===============")
+            print(e)
+            return None
+
         return vector
-    
+        
     # 内部方法：生成向量索引
     def __gen_vector_dict(self) -> None:
         self.vector_dict = {}
@@ -158,8 +164,9 @@ class ChatService:
         index_list = ["SPU", "SKU", "Category1", "Category2", "Category3"]
         for index in index_list:
             vector = self.__gen_vector(name=index)
-            self.vector_dict[index] = vector
-    
+            if vector is not None:
+                self.vector_dict[index] = vector
+        
     # 内部方法：生成cypher
     def __generate_cypher(self, question: str, schema_info: str):
         template = PromptTemplate(input_variables=WebConfig.CYPHER_VARIABLES, template=WebConfig.CYPHER_TEMPLET)
@@ -167,7 +174,7 @@ class ChatService:
         answer = self.llm.invoke(input=cypher_prompt)
         cypher = self.json_parser.invoke(input=answer)
         return cypher
-    
+        
     # 内部方法：使用向量+关键词检索修正实体名称
     def __entity_align(self, entities_to_align: list[dict[str, str]]) -> list[dict[str, str]]:
         for node in entities_to_align:
@@ -176,7 +183,7 @@ class ChatService:
                 if results:
                     node['entity'] = results[0].page_content
         return entities_to_align
-
+        
     # 将 Cypher 查询结果生成自然语言答案
     def __generate_answer(self, question: str, query_result: list[dict[str, str]]) -> str:
         template = PromptTemplate(input_variables=WebConfig.ANSWER_VARIABLES, template=WebConfig.ANSWER_TEMPLET)
@@ -184,24 +191,28 @@ class ChatService:
         answer = self.llm.invoke(prompt)
         result = self.str_parser.invoke(answer)
         return result
-    
+        
     
 app = FastAPI()
 app.mount(path=WebConfig.STATIC_PATH, app=StaticFiles(directory=WebConfig.STATIC_DIR), name=WebConfig.STATIC_NAME)
 
-chat = ChatService()
 
-
-@app.get("/")
+# 懒加载：首次调用时才创建 ChatService，避免导入模块时依赖 Neo4j 索引
+@lru_cache(maxsize=1)
+def get_chat() -> ChatService:
+    return ChatService()
+    
+    
+@app.get(path="/", description="返回静态文件")
 def read_root() -> RedirectResponse:
     return RedirectResponse("static/index.html")
-
-
-@app.post("/api/chat")
+    
+    
+@app.post(path="/api/chat", response_model=Answer, description="返回聊天结果")
 def read_item(question: Question) -> Answer:
-    result = chat.chat(question=question.message)
+    result = get_chat().chat(question=question.message)
     return Answer(message=result)
-
-
+    
+    
 if __name__ == "__main__":
     run(app=WebConfig.APP_NAME, host=WebConfig.HOST, port=WebConfig.PORT, reload=WebConfig.IS_RELOAD)

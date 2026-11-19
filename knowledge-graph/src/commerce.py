@@ -16,11 +16,15 @@
 """
 
 import os
+
+from transformers.trainer_utils import TrainOutput
+
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-from typing import Dict, Union
-from datasets import load_from_disk
+from typing import Dict, Union, cast
+from datasets import load_from_disk, Dataset
 from transformers import AutoTokenizer, Trainer, TrainingArguments, DataCollatorForTokenClassification
+from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers import AutoModelForTokenClassification, EvalPrediction, EarlyStoppingCallback
 from torch import cuda, no_grad, argmax, device
 from evaluate import load as load_metric
@@ -34,41 +38,19 @@ class GraphModel:
         self.test_path = PathConfig.TEST_PATH                        # 测试数据路径
         self.valid_path = PathConfig.VALID_PATH                      # 验证数据路径
         self.model_path = PathConfig.SAVED_MODEL_PATH                # 模型保存路径
+        self.dev = device("cuda" if cuda.is_available() else "cpu")  # 设备
         
-        self.label2id = None                                          # 标签映射
-        self.id2label = None                                          # 标签映射
-        self.tokenizer = None                                         # 分词器
-        self.model = None                                             # 模型
-        self.data_collator = None                                     # 数据整理器
-        self.trainer = None                                           # 训练器
+        self.label2id: dict[str, int]                                # 标签映射
+        self.id2label: dict[int, str]                                # 标签映射
+        self.tokenizer: PreTrainedTokenizer                          # 分词器
+        self.model: PreTrainedModel                                  # 模型
+        self.data_collator: DataCollatorForTokenClassification       # 数据整理器
+        self.trainer: Trainer                                        # 训练器
         
-        self.get_parameters()                                         # 获取参数
-        
-    # 获取参数
-    def get_parameters(self) -> None:
-        # 1. 加载预训练的 BERT 分词器
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=PathConfig.BERT_MODEL)
-        
-        # 2. 标签映射
-        self.id2label = {index: label for index, label in enumerate(FieldConfig.LABELS)}
-        self.label2id = {label: index for index, label in enumerate(FieldConfig.LABELS)}
-        
-        # 3. 加载预训练的 BERT 模型
-        self.model = AutoModelForTokenClassification.from_pretrained(
-                pretrained_model_name_or_path=PathConfig.BERT_MODEL,
-                id2label=self.id2label,
-                label2id=self.label2id,
-                num_labels=len(FieldConfig.LABELS))
-        
-        # 4. 数据整理器
-        self.data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
-                                                                padding=TrainConfig.IS_PADDING,
-                                                                max_length=TrainConfig.MAX_LENGTH,
-                                                                return_tensors=TrainConfig.RETURN_TENSORS,
-                                                                label_pad_token_id=FieldConfig.MARK_LABEL)
+        self.__get_parameters()                                      # 获取参数
         
     # 训练模型
-    def train(self) -> None:
+    def train(self) -> TrainOutput:
         # 1. 加载数据集
         train_dataset = load_from_disk(dataset_path=self.train_path)
         valid_dataset = load_from_disk(dataset_path=self.valid_path)
@@ -76,7 +58,7 @@ class GraphModel:
         # 2. 创建训练参数
         train_args = TrainingArguments(
                 output_dir=PathConfig.SAVED_MODEL_PATH,              # 模型保存路径
-                logging_dir=PathConfig.LOG_DIR,                      # 日志保存位置
+                # logging_dir=PathConfig.LOG_DIR,                      # 日志保存位置
                 num_train_epochs=TrainConfig.EPOCHS,                 # 训练总轮次
                 per_device_train_batch_size=TrainConfig.BATCH_SIZE,  # 批大小
                 save_strategy=TrainConfig.SAVE_STRATEGY,             # 保存策略
@@ -96,9 +78,10 @@ class GraphModel:
         early_stop = EarlyStoppingCallback(early_stopping_patience=TrainConfig.EARLY_STOPPING_PATIENCE)
         
         # 4. 创建训练器
-        self.trainer = Trainer(model=self.model, train_dataset=train_dataset, eval_dataset=valid_dataset,
-                               args=train_args, data_collator=self.data_collator, callbacks=[early_stop],
-                               compute_metrics=self.compute_metrics)
+        self.trainer = Trainer(model=self.model, train_dataset=cast(Dataset, train_dataset),
+                               eval_dataset=cast(Dataset, valid_dataset), args=train_args,
+                               data_collator=self.data_collator, callbacks=[early_stop],
+                               compute_metrics=self.__compute_metrics)
                 
         # 5. 训练
         results = self.trainer.train()
@@ -109,7 +92,7 @@ class GraphModel:
         return results
         
     # 验证模型
-    def eval(self):
+    def eval(self) -> dict[str, float]:
         # 1. 加载模型
         model = AutoModelForTokenClassification.from_pretrained(PathConfig.SAVED_MODEL_PATH)
         
@@ -117,13 +100,13 @@ class GraphModel:
         test_dataset = load_from_disk(dataset_path=self.test_path)
         
         # 3. 定义训练器
-        trainer = Trainer(model=model, eval_dataset=test_dataset, data_collator=self.data_collator,
-                          compute_metrics=self.compute_metrics)
+        trainer = Trainer(model=model, eval_dataset=cast(Dataset, test_dataset),
+                          data_collator=self.data_collator, compute_metrics=self.__compute_metrics)
         
         # 4. 验证评估
         result = trainer.evaluate()
         return  result
-    
+        
     # 预测数据
     def predict(self, text: Union[str, list[str]]):
         is_string = isinstance(text, str)
@@ -144,13 +127,13 @@ class GraphModel:
         model = AutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path=PathConfig.SAVED_MODEL_PATH)
         
         # 3. 将模型和数据加载到设备
-        dev = device("cuda" if cuda.is_available() else "cpu")
-        inputs = {key: value.to(device=dev) for key, value in encoding.items()}
-        model.to(device=dev)
+        
+        inputs = {key: value.to(device=self.dev) for key, value in encoding.items()}
+        model.to(device=self.dev)
         
         # 4. 前向传播
         with no_grad():
-            outputs = model(**inputs)                                # 前向传播
+            outputs = model.forward(**inputs)                        # 前向传播
             logits = outputs.logits                                  # 预测结果
             predict_list = argmax(input=logits, dim=-1).tolist()     # 预测标签
         
@@ -167,8 +150,36 @@ class GraphModel:
         
         return results
         
+    # 获取参数
+    def __get_parameters(self) -> None:
+        # 1. 加载预训练的 BERT 分词器
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=PathConfig.BERT_MODEL)
+        
+        # 2. 标签映射
+        self.id2label = {index: label for index, label in enumerate(FieldConfig.LABELS)}
+        self.label2id = {label: index for index, label in enumerate(FieldConfig.LABELS)}
+        
+        # 3. 加载预训练的 BERT 模型
+        self.model = AutoModelForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path=PathConfig.BERT_MODEL,
+                id2label=self.id2label,
+                label2id=self.label2id,
+                num_labels=len(FieldConfig.LABELS))
+        
+        # 4. 数据整理器
+        self.data_collator = DataCollatorForTokenClassification(tokenizer=self.tokenizer,
+                                                                padding=TrainConfig.IS_PADDING,
+                                                                max_length=TrainConfig.MAX_LENGTH,
+                                                                return_tensors=TrainConfig.RETURN_TENSORS,
+                                                                label_pad_token_id=FieldConfig.MARK_LABEL)
+            
+    # 保存模型
+    def __save_model(self, model_path: str = PathConfig.SAVED_MODEL_PATH) -> None:
+        self.trainer.save_model(output_dir=model_path)
+        print(f"模型保存成功：{model_path}")
+        
     # 评估模型
-    def compute_metrics(self, predict: EvalPrediction) -> Dict[str, float]:
+    def __compute_metrics(self, predict: EvalPrediction) -> Dict[str, float]:
         seqeval_eval = load_metric(TrainConfig.SEQEVAL)              # 评估指标
         logits = predict.predictions                                 # 模型预测输出
         predict_list = logits.argmax(axis=-1)                        # 预测标签
@@ -193,12 +204,7 @@ class GraphModel:
             
         results = seqeval_eval.compute(predictions=unpad_predict_list, references=unpad_label_list)
         return results
-    
-    # 保存模型
-    def __save_model(self, model_path: str = PathConfig.SAVED_MODEL_PATH) -> None:
-        self.trainer.save_model(output_dir=model_path)
-        print(f"模型保存成功：{model_path}")
-    
+        
     # 抽取标签
     def __extract_label(self, inputs: list[str], contents: list[str]) -> list[str]:
         label_list = []
@@ -219,17 +225,3 @@ class GraphModel:
             label_list.append(label)
             
         return label_list
-    
-
-if __name__ == '__main__':
-    TrainConfig.BATCH_SIZE = 16
-    TrainConfig.EPOCHS = 2
-    model = GraphModel()
-    trains = model.train()
-    print(f"trains = {trains}")
-    
-    pre = model.predict(text="曼妮芬性感轻透舒适提托文胸女士性感蕾丝单层围薄款调整型内衣")
-    print(f"predict = {pre}")
-
-    evals = model.eval()
-    print(f"evals = {evals}")
